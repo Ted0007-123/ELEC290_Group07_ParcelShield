@@ -1,3 +1,4 @@
+#include <Keypad.h>
 const int FSRPin = A0;
 
 const int Weight_Tolerance = 0.9;
@@ -7,7 +8,17 @@ float fsrResistance;
 float weight;
 float A = 100.0;              
 float B = -1.5;
-int Max_Weight = 0;
+int Max_Weight = 0;x
+
+byte pin_rows[ROW_NUM] = {9, 8, 7, 6}; //connect to the row pinouts of the keypad
+byte pin_column[COLUMN_NUM] = {5, 4, 3}; //connect to the column pinouts of the keypad
+
+char keys[ROW_NUM][COLUMN_NUM] = {
+  {'1','2','3'},
+  {'4','5','6'},
+  {'7','8','9'},
+  {'*','0','#'}
+};
 
 void setup() {
 }
