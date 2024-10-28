@@ -8,7 +8,7 @@ float fsrResistance;
 float weight;
 float A = 100.0;              
 float B = -1.5;
-int Max_Weight = 0;x
+int Max_Weight = 0;
 
 byte pin_rows[ROW_NUM] = {9, 8, 7, 6}; //connect to the row pinouts of the keypad
 byte pin_column[COLUMN_NUM] = {5, 4, 3}; //connect to the column pinouts of the keypad
