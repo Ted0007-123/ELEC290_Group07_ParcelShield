@@ -1,9 +1,9 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-const char* ssid = "your_wifi_ssid";
-const char* password = "your_wifi_password";
-const char* mqtt_server = "your_mqtt_broker_ip";
+const char* ssid = "Cracker boiz";
+const char* password = "Xaviers3rdNut";
+const char* mqtt_server = "3.15.24.121";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
