@@ -1,6 +1,6 @@
 #define int FSRPin = A0;
-#define int echoPin = 1;
-#define int trigPin = 2;
+#define int echoPin = 12;
+#define int trigPin = 13;
 
 const int Tolerance = 0.9;
 const float Vcc = 3.3;
