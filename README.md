@@ -17,4 +17,4 @@ FSR - A0
 
 Keypads - 3,4,5,6,7,8,9
 
-Ultrasonic Sensor - (Echo 1)(Trigger 2)
+Ultrasonic Sensor - (Echo 12)(Trigger 13)
