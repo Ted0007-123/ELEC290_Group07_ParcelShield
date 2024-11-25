@@ -1,23 +1,17 @@
-// #define int FSRPin = A0;
-// #define int echoPin = 12;
-// #define int trigPin = 13;
-// #define int BuzzPin = 10;
+#define FSRPin A0
+#define echoPin 12
+#define trigPin 13
+#define BuzzPin 10
 #include <Keypad.h>
 #include <ctype.h>
 
 const byte ROWS=4;
 const byte COLS=3;
-const int Tolerance = 0.9;
-const float Vcc = 3.3;
-float fsrVoltage;
-float fsrResistance;
-float weight;
-float A = 271.0;
-float B = -1.5;
-int Lid_Distance;
+float Lid_Distance;
+float curr_Distance;
 bool Authorization = false;
-float R_known = 12000;
-int Max_Weight;
+float Max_FSR=0;
+float currFSR=0;
 
 // char numberKeys[ROWS][COLS] = {
 //     { '1','2','3' },
@@ -31,70 +25,59 @@ int Max_Weight;
 // Keypad numpad( makeKeymap(numberKeys), rowPins, colPins, sizeof(rowPins), sizeof(colPins) );
 // Keypad ltrpad( makeKeymap(alphaKeys), rowPins, colPins, sizeof(rowPins), sizeof(colPins) );
 
-//To manage password as Linkedlist, define node
-typedef struct PasswordNode{
-  long Password;
-  struct PasswordNode* next;
-}PasswordNode;
+void setup() {
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(BuzzPin, OUTPUT);
+  pinMode(FSRPin, INPUT);
+  Lid_Distance = 100;
 
-//Random 8 Digit Number generator
-long num_Randoms() {
-    long num = 0;
-    for(int i =0; i < 8; i++) {
-        num = num * 10 + rand() % 10;
-    }
-    return num;
+  // ltrpad.begin( makeKeymap(alphaKeys) );
+  // // numpad.begin( makeKeymap(numberKeys) );
+  // ltrpad.setHoldTime(500);                   // Default is 1000mS
+  // numpad.addEventListener(keypadEvent_num);  // Add an event listener.
+  // numpad.setHoldTime(500);     
+  Serial.begin(9600);
 }
 
-//Initiate password list
-PasswordNode* password_list_head = NULL;
-
-//Create password of 8 digit random number, push it to head of the list
-long createPassword(){
-  long pwd = num_Randoms();
-  PasswordNode* new_password = (PasswordNode*)malloc(sizeof(PasswordNode));
-  new_password -> Password = pwd;
-  new_password -> next = password_list_head;
-  password_list_head = new_password;
-  return pwd;
-}
-
-//Take in a head reference, the only case for us will be password_list_head, and a password value
-bool is_Password_remove(struct PasswordNode** head_ref, long pwd){
-  //if the list is empty, return false
-  if(*head_ref==NULL){
-    return false;
+void loop() {
+  delay(500);
+  // currFSR = analogRead(FSRPin);
+  curr_Distance = calculate_distance();
+  if(Lid_Distance > curr_Distance || Max_FSR <= currFSR){
+    Lid_Distance = curr_Distance;
+    Max_FSR = currFSR;
+    stop_Alarm();
+  }else if(Lid_Distance < curr_Distance*0.9){
+    sound_Alarm();
   }
-  //if password of the head node is equal to the input password, remove the node
-  if((*head_ref) -> Password == pwd){
-    struct PasswordNode* temp = *head_ref;
-    *head_ref = (*head_ref)-> next;
-    free(temp);
-    return true;
-  }
-  //if the password of head node does not match, move onto next node and repeat same process
-  return is_Password_remove(&((*head_ref)->next), pwd);
+  Serial.print("Lid distance:     ");
+  Serial.println(Lid_Distance);
+  Serial.print("current distance: ");
+  Serial.println(calculate_distance());
+
+
+  // if(){
+  //   stop_Alarm();
+  // }else if(Max_FSR*0.9 > currFSR){
+  //   sound_Alarm();
+  // }
+
+  // Serial.print("Max Weight       ");
+  // Serial.println(Max_FSR);  
+  // Serial.print("current Weight   ");
+  // Serial.println(currFSR);
+  delay(500);
 }
 
-float calculate_Weight(){
-  fsrVoltage = (analogRead(A0)*Vcc/1023);
-  fsrResistance = resistance_calculation(fsrVoltage);
-  fsrResistance /= 1000; //into kilo ohms
-  weight = pow((fsrResistance/A),1/B)/9.81;
-  // Serial.println(weight*1000);
-  return weight*1000;
-}
-float resistance_calculation(float voltage_in){
-  return (R_known * (Vcc - voltage_in )/voltage_in);
-}
 void sound_Alarm(){
-  Serial.println("Alarm Initiated");
-  while(Max_Weight > calculate_Weight()){
-  digitalWrite(10, HIGH);
-  }
-  digitalWrite(10, LOW);
-  Serial.println("Alarm Stopped");
+  // Serial.println("Alarm Initiated");
+  digitalWrite(BuzzPin, HIGH);
 }
+void stop_Alarm(){
+  digitalWrite(BuzzPin, LOW);
+}
+
 // void keypadEvent_ltr(KeypadEvent key) {
 //     // in here when in alpha mode.
 //     kpadState = ltrpad.getState();
@@ -156,47 +139,17 @@ void sound_Alarm(){
 //     }  // end switch-case
 // }// end switch on state function
 
-void setup() {
-  pinMode(13, OUTPUT);
-  pinMode(12, INPUT);
-  pinMode(10, OUTPUT);
-  float Lid_distance = calculate_distance();
-  float Max_Weight  = calculate_Weight();
-  // ltrpad.begin( makeKeymap(alphaKeys) );
-  // // numpad.begin( makeKeymap(numberKeys) );
-  // ltrpad.setHoldTime(500);                   // Default is 1000mS
-  // numpad.addEventListener(keypadEvent_num);  // Add an event listener.
-  // numpad.setHoldTime(500);     
-  Serial.begin(9600);
-}
+
 
 //calculates distance of ultrasonic sensor in mm
-int calculate_distance(){
-  digitalWrite(13, LOW);
+float calculate_distance(){
+  digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
-  digitalWrite(13,HIGH); // turn on the Trigger to generate pulse
+  digitalWrite(trigPin,HIGH); // turn on the Trigger to generate pulse
   delayMicroseconds(10);
-  digitalWrite(13,LOW);
-  long duration = pulseIn(12, HIGH);
+  digitalWrite(trigPin,LOW);
+  long duration = pulseIn(echoPin, HIGH);
   float distance= duration * 0.00344 / 2; // Expression to calculate
+  return distance;
 }
 
-void loop() {
-  // if(Max_Weight > calculate_Weight()* Tolerance){
-  //   sound_Alarm();
-  // }else if(Max_Weight < calculate_Weight()){
-  //   Max_Weight = calculate_Weight();
-  // }
-  // if(Lid_Distance > calculate_distance()){
-  //   Lid_Distance = calculate_distance();
-  // }else if(Lid_distance < calculate_distance()*Tolerance && Authorization == false){
-  //   sound_Alarm();
-  // }
-  if(Max_Weight > calculate_Weight()){
-    sound_Alarm();
-  }else if(Max_Weight < calculate_Weight()){
-    Max_Weight = calculate_Weight();
-    delay(500);
-  }
-  Serial.println(Max_Weight);
-}
