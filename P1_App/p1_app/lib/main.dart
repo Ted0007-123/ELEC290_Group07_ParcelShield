@@ -1,7 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_browser_client.dart';
+import 'dart:math';
 
 void main() {
   runApp(const ParcelShieldApp());
+}
+
+String generateOtp() {
+  Random random = Random();
+  String otp = '';
+  for (int i = 0; i < 8; i++) {
+    otp += random.nextInt(10).toString();  // Generates a random digit (0-9)
+  }
+  return otp;
 }
 
 class ParcelShieldApp extends StatelessWidget {
@@ -29,29 +41,95 @@ class ParcelShieldHomePage extends StatefulWidget {
 }
 
 class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
+  late MqttBrowserClient client;
   String _otp = '';
   bool _isLoading = false;
-  bool _hasPackage = false; //placeholder for package status
+  bool _hasPackage = false;
+  String status = "Disconnected";
 
-  //function to simulate OTP request
+  @override
+  void initState() {
+    super.initState();
+    setupMQTT();
+  }
+
+  void setupMQTT() async {
+    // Initialize the MQTT client
+    client = MqttBrowserClient('ws://ec2-3-15-24-121.us-east-2.compute.amazonaws.com', 'parcel_shield_client');
+    client.port = 8081;
+    client.logging(on: true);
+    client.keepAlivePeriod = 20;
+
+    client.onConnected = () {
+      print("Connected to the MQTT broker!");
+      setState(() {
+        status = "Connected";
+      });
+      subscribeToPackageStatus();
+    };
+
+    client.onDisconnected = () {
+      print("Disconnected from the MQTT broker.");
+      setState(() {
+        status = "Disconnected";
+      });
+    };
+
+    try {
+      await client.connect();
+    } catch (e) {
+      print("Connection error: $e");
+      setState(() {
+        status = "Error: $e";
+      });
+    }
+  }
+
+  void subscribeToPackageStatus() {
+    // Subscribe to the package status topic
+    client.subscribe('test/topic', MqttQos.atMostOnce);
+
+    client.updates!.listen((List<MqttReceivedMessage> messages) {
+      final message = messages[0].payload as MqttPublishMessage;
+      final payload = MqttPublishPayload.bytesToStringAsString(message.payload.message);
+
+      print("Received package status: $payload");
+      setState(() {
+        _hasPackage = payload.toLowerCase() == 'present';
+      });
+    });
+  }
+
+  void publishOtp(String otp) {
+    if (client.connectionStatus!.state == MqttConnectionState.connected) {
+      final builder = MqttClientPayloadBuilder();
+      builder.addString(otp);
+      client.publishMessage('parcel_shield/otp', MqttQos.atMostOnce, builder.payload!);
+      print("OTP published: $otp");
+    } else {
+      print("Client not connected, cannot send OTP.");
+    }
+  }
+
   void _requestOtp() {
     setState(() {
       _isLoading = true;
     });
 
     Future.delayed(const Duration(seconds: 2), () {
+      final generatedOtp = generateOtp(); // Replace with actual OTP logic
       setState(() {
-        _otp = '123456'; //this will be replaced with actual OTP logic.
+        _otp = generatedOtp;
         _isLoading = false;
       });
+      publishOtp(generatedOtp); // Publish OTP to MQTT topic
     });
   }
 
-  //placeholder function to toggle package status
-  void _togglePackageStatus() {
-    setState(() {
-      _hasPackage = !_hasPackage;
-    });
+  @override
+  void dispose() {
+    client.disconnect();
+    super.dispose();
   }
 
   @override
@@ -85,7 +163,7 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                //header and description
+                // Header and Description
                 const Text(
                   'Welcome to Parcel Shield',
                   style: TextStyle(
@@ -106,7 +184,7 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
                 ),
                 const SizedBox(height: 30),
 
-                //request OTP Button
+                // Request OTP Button
                 ElevatedButton(
                   onPressed: _isLoading ? null : _requestOtp,
                   style: ElevatedButton.styleFrom(
@@ -129,7 +207,7 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
                 ),
                 const SizedBox(height: 40),
 
-                //OTP Display Box
+                // OTP Display Box
                 AnimatedOpacity(
                   opacity: _otp.isEmpty ? 0 : 1,
                   duration: const Duration(seconds: 1),
@@ -152,7 +230,7 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
                 ),
                 const SizedBox(height: 40),
 
-                //package Status Widget
+                // Package Status Widget
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -179,23 +257,6 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
-
-                //button to simulate package status change 
-                ElevatedButton(
-                  onPressed: _togglePackageStatus,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey,
-                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text(
-                    'click button to change package status, implement logic later',
-                    style: TextStyle(fontSize: 16, color: Colors.white),
-                  ),
-                ),
               ],
             ),
           ),
@@ -204,4 +265,3 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
     );
   }
 }
-
