@@ -3,6 +3,8 @@ import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_browser_client.dart';
 import 'dart:math';
 
+List<List<String>> otpRecords = [];
+
 void main() {
   runApp(const ParcelShieldApp());
 }
@@ -11,7 +13,7 @@ String generateOtp() {
   Random random = Random();
   String otp = '';
   for (int i = 0; i < 8; i++) {
-    otp += random.nextInt(10).toString();  // Generates a random digit (0-9)
+    otp += random.nextInt(10).toString(); // Generates a random digit (0-9)
   }
   return otp;
 }
@@ -43,6 +45,7 @@ class ParcelShieldHomePage extends StatefulWidget {
 class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
   late MqttBrowserClient client;
   String _otp = '';
+  String _name = '';
   bool _isLoading = false;
   bool _hasPackage = false;
   String status = "Disconnected";
@@ -54,8 +57,7 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
   }
 
   void setupMQTT() async {
-    // Initialize the MQTT client
-    client = MqttBrowserClient('ws://ec2-3-15-24-121.us-east-2.compute.amazonaws.com', 'parcel_shield_client');
+    client = MqttBrowserClient('ws://ec2-3-15-24-121.us-east-2.compute.amazonaws.com', 'flutter_client');
     client.port = 8081;
     client.logging(on: true);
     client.keepAlivePeriod = 20;
@@ -86,9 +88,7 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
   }
 
   void subscribeToPackageStatus() {
-    // Subscribe to the package status topic
-    client.subscribe('test/topic', MqttQos.atMostOnce);
-
+    client.subscribe('alerts/fsr', MqttQos.atMostOnce);
     client.updates!.listen((List<MqttReceivedMessage> messages) {
       final message = messages[0].payload as MqttPublishMessage;
       final payload = MqttPublishPayload.bytesToStringAsString(message.payload.message);
@@ -104,7 +104,7 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
     if (client.connectionStatus!.state == MqttConnectionState.connected) {
       final builder = MqttClientPayloadBuilder();
       builder.addString(otp);
-      client.publishMessage('parcel_shield/otp', MqttQos.atMostOnce, builder.payload!);
+      client.publishMessage('opt/request', MqttQos.atMostOnce, builder.payload!);
       print("OTP published: $otp");
     } else {
       print("Client not connected, cannot send OTP.");
@@ -112,18 +112,40 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
   }
 
   void _requestOtp() {
-    setState(() {
-      _isLoading = true;
-    });
-
-    Future.delayed(const Duration(seconds: 2), () {
-      final generatedOtp = generateOtp(); // Replace with actual OTP logic
+    if (_name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please enter a name before generating an OTP."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    else if (_name.length > 25 || _name.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please enter a name that is less than 25 characters and more than 3."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    else { // If the OTP name was valid, proceed
       setState(() {
-        _otp = generatedOtp;
-        _isLoading = false;
+        _isLoading = true;
       });
-      publishOtp(generatedOtp); // Publish OTP to MQTT topic
-    });
+
+      Future.delayed(const Duration(seconds: 2), () {
+        setState(() {
+          _otp = generateOtp();
+          _isLoading = false;
+        });
+
+        // Add the OTP and name to the global 2D array
+        otpRecords.add([_name, _otp]);
+        print("OTP Records: $otpRecords"); // For debugging
+      });
+    }
   }
 
   @override
@@ -163,7 +185,6 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Header and Description
                 const Text(
                   'Welcome to Parcel Shield',
                   style: TextStyle(
@@ -183,31 +204,44 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 30),
-
-                // Request OTP Button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _requestOtp,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    elevation: 5,
-                    shadowColor: Colors.blue.withOpacity(0.5),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        )
-                      : const Text(
-                          'Generate OTP',
-                          style: TextStyle(fontSize: 18, color: Colors.white),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 300), // Adjust width as needed
+                      child: TextField(
+                        onChanged: (value) => setState(() => _name = value),
+                        decoration: const InputDecoration(
+                          labelText: "Package Name",
+                          border: OutlineInputBorder(),
                         ),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _requestOtp,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 5,
+                        shadowColor: Colors.blue.withOpacity(0.5),
+                      ),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            )
+                          : const Text(
+                              'Generate OTP',
+                              style: TextStyle(fontSize: 18, color: Colors.white),
+                            ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 40),
-
-                // OTP Display Box
                 AnimatedOpacity(
                   opacity: _otp.isEmpty ? 0 : 1,
                   duration: const Duration(seconds: 1),
@@ -229,8 +263,6 @@ class _ParcelShieldHomePageState extends State<ParcelShieldHomePage> {
                   ),
                 ),
                 const SizedBox(height: 40),
-
-                // Package Status Widget
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
